@@ -53,10 +53,12 @@ void initialize()
 uint getSize(char** block)
 {
     uint value = ((uint*)*block)[-1];
-    if (value > 0 && value < MEM_SIZE)
+    printf("value: %u\n", value);
+    if (value > 0)
     {
         // printf("value before shift: %u\n", value);
         value &= ~(1U << (BITS - 1)); // changed 1UL to 1U 
+        printf("value after shift: %u\n", value);
         return value;
     } else {
         return 0;
@@ -96,11 +98,23 @@ char* splitAndAllocate(char** current, size_t sizeNewBlock)
 {
     uint freeSpace = getSize(current);
     // pointer to the beginnning of metadata for the new block
-    char* pointerNewBlock = *current + (freeSpace - sizeNewBlock); 
+    char* pointerNewBlock = *current + freeSpace - sizeNewBlock - HEADER_SIZE; 
     printf("pointer to current: %p\t new block: %p\n", *current, pointerNewBlock);
-    markAllocated(&pointerNewBlock, (uint) sizeNewBlock);
+    // markAllocated(&pointerNewBlock, (uint) sizeNewBlock);
     // printf("size of marked block: %u\n", getSize(&pointerNewBlock));   
+    uint header = (uint) sizeNewBlock;
+    header |= 1 << (BITS - 1);
+    printf("header of marked block: %u\n", header);
+    uint *headerPtr = (uint*)(pointerNewBlock);
+    *headerPtr = header; 
+    // int i=-3;
+    // for (i=-3; i<0; i++)
+    // {
+    //     printf("address: %p\t%d:   %u\tsize: %zu\n", &pointerNewBlock, i, *((uint*)(&pointerNewBlock)[i]), sizeof(*((uint*)(&pointerNewBlock)[i])));
+    // }
 
+    printf("header for allocated block: %u\n", *((uint*)(pointerNewBlock)));
+    // printf("header for allocated block: %u\n", *((uint*)(block)[0]));
 
     // reduce amount of free space in original block
     ((uint*)*current)[-1] = freeSpace - sizeNewBlock - HEADER_SIZE;
@@ -133,10 +147,10 @@ void printMemoryBlocks(char* header)
 //     }
 //     while (current < endOfMem)
 //     {
-//         if (bytes < getSize(current) && isFree(current))
+//         if (bytes < getSize(&current) && isFree(&current))
 //         {
-//             int success = splitAndAllocate(current, bytes);
-//             if (!success)
+//             char* ptr = splitAndAllocate(&current, bytes);
+//             if (ptr == NULL)
 //             {
 //                 printf("Error allocating %lu bytes, not enough space", bytes);
 //             }
