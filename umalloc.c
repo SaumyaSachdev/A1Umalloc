@@ -53,12 +53,13 @@ void initialize()
 uint getSize(char** block)
 {
     uint value = ((uint*)*block)[-1];
-    printf("value: %u\n", value);
-    if (value > 0)
+    value &= ~(1U << (BITS - 1));
+    // printf("value: %u\n", value);
+    if (value > 0 && value < MEM_SIZE)
     {
         // printf("value before shift: %u\n", value);
-        value &= ~(1U << (BITS - 1)); // changed 1UL to 1U 
-        printf("value after shift: %u\n", value);
+         // changed 1UL to 1U 
+        // printf("value after shift: %u\n", value);
         return value;
     } else {
         return 0;
@@ -66,6 +67,7 @@ uint getSize(char** block)
 }
 
 // check if the block is free or not by checking the msb
+// returns 1 if block is allocated, 0 if free
 bool isFree(char** block)
 {
     uint value = ((uint*)*block)[-1];
@@ -74,22 +76,22 @@ bool isFree(char** block)
 }
 
 // mark allocated and store the metadata in the preceding 4 bytes
-void markAllocated(char** block, uint size)
-{
-    uint header = size;
-    header |= 1 << (BITS - 1);
-    printf("header of marked block: %u\n", header);
-    *((uint*)(block)) = header; 
-    int i=-3;
-    for (i=-3; i<0; i++)
-    {
-        printf("address: %p\t%d:   %u\tsize: %zu\n",&block, i, *((uint*)(block)[i]), sizeof(*((uint*)(block)[i])));
-    }
+// void markAllocated(char** block, uint size)
+// {
+//     uint header = size;
+//     header |= 1 << (BITS - 1);
+//     printf("header of marked block: %u\n", header);
+//     *((uint*)(block)) = header; 
+//     int i=-3;
+//     for (i=-3; i<0; i++)
+//     {
+//         printf("address: %p\t%d:   %u\tsize: %zu\n",&block, i, *((uint*)(block)[i]), sizeof(*((uint*)(block)[i])));
+//     }
 
-    printf("header for allocated block: %u\n", *((uint*)(block)[-1]));
-    // printf("header for allocated block: %u\n", *((uint*)(block)[0]));
-    return;
-}
+//     printf("header for allocated block: %u\n", *((uint*)(block)[-1]));
+//     // printf("header for allocated block: %u\n", *((uint*)(block)[0]));
+//     return;
+// }
 
 // split the empty block into used and free blocks
 // ensures that the free space is kept before the used space
@@ -99,22 +101,14 @@ char* splitAndAllocate(char** current, size_t sizeNewBlock)
     uint freeSpace = getSize(current);
     // pointer to the beginnning of metadata for the new block
     char* pointerNewBlock = *current + freeSpace - sizeNewBlock - HEADER_SIZE; 
-    printf("pointer to current: %p\t new block: %p\n", *current, pointerNewBlock);
-    // markAllocated(&pointerNewBlock, (uint) sizeNewBlock);
-    // printf("size of marked block: %u\n", getSize(&pointerNewBlock));   
+    printf("size for block: %zu\n pointer to current: %p\t new block: %p\n", sizeNewBlock, *current, pointerNewBlock);
     uint header = (uint) sizeNewBlock;
     header |= 1 << (BITS - 1);
     printf("header of marked block: %u\n", header);
     uint *headerPtr = (uint*)(pointerNewBlock);
     *headerPtr = header; 
-    // int i=-3;
-    // for (i=-3; i<0; i++)
-    // {
-    //     printf("address: %p\t%d:   %u\tsize: %zu\n", &pointerNewBlock, i, *((uint*)(&pointerNewBlock)[i]), sizeof(*((uint*)(&pointerNewBlock)[i])));
-    // }
 
     printf("header for allocated block: %u\n", *((uint*)(pointerNewBlock)));
-    // printf("header for allocated block: %u\n", *((uint*)(block)[0]));
 
     // reduce amount of free space in original block
     ((uint*)*current)[-1] = freeSpace - sizeNewBlock - HEADER_SIZE;
@@ -137,54 +131,72 @@ void printMemoryBlocks(char* header)
     printf("---------------------------------------------------------------\n");
 }
 
-// void* umalloc(size_t bytes)
-// {
-//     void* ptr;
-//     char* current = freeList;
-//     if (init == 'f')
-//     {
-//         initialize();
-//     }
-//     while (current < endOfMem)
-//     {
-//         if (bytes < getSize(&current) && isFree(&current))
-//         {
-//             char* ptr = splitAndAllocate(&current, bytes);
-//             if (ptr == NULL)
-//             {
-//                 printf("Error allocating %lu bytes, not enough space", bytes);
-//             }
-//         }  else {
-//             current += getSize(current);
-//         }
-//     }
-//     return ptr;
-// }
+void* umalloc(size_t bytes)
+{
+    void* ptr;
+    char* current = freeList;
+    if (init == 'f')
+    {
+        initialize();
+    }
+    while (current < endOfMem)
+    {
+        if (bytes > MEM_SIZE || bytes <= 0)
+        {
+            return NULL;
+        }
+        if (bytes < getSize(&current) && !isFree(&current))
+        {
+            ptr = splitAndAllocate(&current, bytes);
+            if (ptr == NULL)
+            {
+                printf("Error allocating %lu bytes, not enough space", bytes);
+            }
+            break;
+        }  else {
+            current += getSize(&current);
+
+        }
+    }
+
+    return ptr;
+}
 
 void ufree(void* ptr)
 {
-
+    ptr = (char*) ptr;
+    uint value = ((uint*)ptr)[-1];
+    value &= ~(1U << (BITS - 1));
+    ((uint*)ptr)[-1] = value;
+    return;
 }
 
 int main() {
-    int i=0;
-    printf("mem contents before init:\n");
-    for(i=0; i<30; i++)
-    {
-        printf("%c", mem[i]);
-    }
-    printf("\n");
+    // int i=0;
+    // printf("mem contents before init:\n");
+    // for(i=0; i<30; i++)
+    // {
+    //     printf("%c", mem[i]);
+    // }
+    // printf("\n");
     initialize();
-    printf("mem contents after init:\n");
-    for(i=0; i<100; i++)
-    {
-        printf("%c", mem[i]);
-    }
-    printf("\n");
-    printf("get size of end: %u\n", getSize(&freeList));
-    printf("header: %u\n", ((uint*)mem)[0]);
-    printf("isFree: %d\n", isFree(&freeList));
-    char* ptr = splitAndAllocate(&freeList, 1000);
+    // printf("mem contents after init:\n");
+    // for(i=0; i<100; i++)
+    // {
+    //     printf("%c", mem[i]);
+    // }
+    // printf("\n");
+    // printf("get size of end: %u\n", getSize(&freeList));
+    // printf("header: %u\n", ((uint*)mem)[0]);
+    // printf("isFree: %d\n", isFree(&freeList));
+    char* ptr1 = umalloc(1000);
+    printf("ptr1: %p \t %zu\n", ptr1, sizeof(ptr1));
+    char* ptr2 = umalloc(300);
+    printf("ptr2: %p \t %zu\n", ptr2, sizeof(ptr2));
+    char* ptr3 = umalloc(500);
+    printf("ptr3: %p\n", ptr3);
+    ufree(ptr1);
+
     printMemoryBlocks(freeList);
     // printf("ptrrrrrrr isFree: %d\n", isFree(&ptr));
     // rest of mem: %s\n, freeList);
