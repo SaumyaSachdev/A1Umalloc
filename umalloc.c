@@ -19,7 +19,6 @@ char* head;
 char* endOfMem;
 char init = 'f';
 
-
 /**
  * using implicit free lists 
 */
@@ -78,30 +77,53 @@ char* splitAndAllocate(char** current, size_t sizeNewBlock)
     // printf("split and allocateeeeeeeeeeeeee\n");
     uint freeSpace = getSize(current);
     // pointer to the beginnning of metadata for the new block
-    char* pointerNewBlock = *current + freeSpace - sizeNewBlock - HEADER_SIZE; 
+    // char* pointerNewBlock = *current + freeSpace - sizeNewBlock - HEADER_SIZE; 
     // printf("size for block: %zu\n pointer to current: %p\t new block: %p\n", sizeNewBlock, *current, pointerNewBlock);
-    uint head = (uint) sizeNewBlock;
-    head |= 1 << (BITS - 1);
+    // uint head = (uint) sizeNewBlock;
+    // head |= 1 << (BITS - 1);
     // printf("head of marked block: %u\n", head);
-    uint *headPtr = (uint*)(pointerNewBlock);
-    *headPtr = head; 
+    // uint *headPtr = (uint*)(pointerNewBlock);
+    // *headPtr = head; 
     // reduce amount of free space in original block
-    ((uint*)*current)[-1] = freeSpace - sizeNewBlock - HEADER_SIZE;
-    pointerNewBlock += HEADER_SIZE;
-    return pointerNewBlock;
+    // modify existing block metadata to contain size requested
+    if (freeSpace - sizeNewBlock >= 0 && freeSpace - sizeNewBlock <= HEADER_SIZE)
+    {
+        uint size = (uint) sizeNewBlock;
+        size |= 1 << (BITS - 1);
+        ((uint*)*current)[-1] = size;
+        return *current;
+    } else {
+        char* pointerNewBlock = *current + freeSpace - sizeNewBlock - HEADER_SIZE; 
+        // printf("size for block: %zu\n pointer to current: %p\t new block: %p\n", sizeNewBlock, *current, pointerNewBlock);
+        uint head = (uint) sizeNewBlock;
+        head |= 1 << (BITS - 1);
+        // printf("head of marked block: %u\n", head);
+        uint *headPtr = (uint*)(pointerNewBlock);
+        *headPtr = head; 
+        uint newSize = (uint) freeSpace - sizeNewBlock - HEADER_SIZE;
+        // printf("caluculation: %u\t", newSize);
+        ((uint*)*current)[-1] = newSize;
+        // printf("current: %u\n", ((uint*)*current)[-1]);
+        pointerNewBlock += HEADER_SIZE;
+        return pointerNewBlock;
+    }
+    
+    // pointerNewBlock += HEADER_SIZE;
+    // return pointerNewBlock;
 }
 
 // print all blocks in memory 
 void printMemoryBlocks()
 {
     printf("------------------------Memory snapshot------------------------\n");
-    int i = 0;
-    while (head < endOfMem && i<10)
+    char* temp = head;
+    // int i=0;
+    while (temp < endOfMem)
     {
-        uint size = (uint) getSize(&head);
-        printf("memory: %p \tsize of block %d: %u\t allocated: %d\n",(void *) head, i, size, isAllocated(&head));
-        head += size + HEADER_SIZE;
-        i++;
+        uint size = (uint) getSize(&temp);
+        printf("memory: %p \tsize of block: %u\t allocated: %d\n",(void *) temp, size, isAllocated(&temp));
+        temp += size + HEADER_SIZE;
+        // i++;
     }
     printf("---------------------------------------------------------------\n");
 }
@@ -109,33 +131,46 @@ void printMemoryBlocks()
 void* umalloc(size_t bytes, char* fileName, int lineNumber)
 {
     void* ptr = NULL;
+    int i=0;
     if (init == 'f')
     {
         initialize();
     }
     char* current = head;
     // printf("head: %p \t current: %p\n", head, current);
-    while (current < endOfMem)
+    while (current < endOfMem && i < 20)
     {
         // printf("in malloc: %zu\t init: %c \t head: %p\t current: %p\n", bytes, init, head, current);
-        if (bytes > MEM_SIZE || bytes <= 0)
+        i++;
+        if (bytes + HEADER_SIZE > MEM_SIZE)
         {
+            printf("Error on malloc(): size requested is too large. At line %d of %s.\n", lineNumber, fileName);
+            return NULL;
+        }
+        if (bytes <= 0)
+        {
+            printf("Error on malloc(): size requested is less than or equal to zero. At line %d of %s.\n", lineNumber, fileName);
             return NULL;
         }
         // printMemoryBlocks(head);
-        // printf("in malloc get size: %u\t is allocated: %d\n", getSize(&current), isAllocated(&current));
-        if (bytes + HEADER_SIZE < getSize(&current) && !isAllocated(&current))
+        // printf("in malloc bytes requested: %zu\tget size: %u\t is allocated: %d\n", bytes, getSize(&current), isAllocated(&current));
+        if (bytes <= getSize(&current) && !isAllocated(&current))
         {
             // printf("in malloc 1----------------------------------------------------------------\n");
             ptr = splitAndAllocate(&current, bytes);
             if (ptr == NULL)
             {
-                printf("Error allocating %lu bytes, not enough space", bytes);
+                printf("Error on malloc(): cannot allocate %lu bytes, not enough space. At line %d of %s.\n", bytes, lineNumber, fileName);
+                return NULL;
             }
             break;
-        }  else {
-            // printf("in malloc 2222222222222222\n");
+        } else if (current + getSize(&current) < endOfMem) {
             current += getSize(&current);
+        }
+         else {
+            // printf("in malloc 2222222222222222\n");
+            printf("Error on malloc(): cannot allocate %lu bytes, not enough space. At line %d of %s.\n", bytes, lineNumber, fileName);
+            return NULL;
         }
         // printf("outside if elseeeeeee\n");
     }
@@ -148,24 +183,32 @@ void coalescence()
     char* current = head;
     uint currentSize = getSize(&current);
     char* next = current + currentSize + HEADER_SIZE;
-    while (current < endOfMem)
+    while (next < endOfMem)
     {
-        // printf("current: %p \t current size: %u \t next: %p\n", current, currentSize, next);
+        // printf("current: %p \t current size: %u \t\t next: %p\t end of mem: %p\n", current, currentSize, next, endOfMem);
         if (!isAllocated(&current) && !isAllocated(&next))
         {
+            // printf("------------------------------------current: %p \t current size: %u \t next: %p\t next size: %u\n", current, currentSize, next, getSize(&next));
+            
             uint newValue = currentSize + getSize(&next) + HEADER_SIZE;
             ((uint*)current)[-1] = newValue;
+        } else {
+            current = next;
         }
-        current += currentSize + HEADER_SIZE;
+        // current += currentSize + HEADER_SIZE;
         currentSize = getSize(&current);
-        next = current + currentSize + HEADER_SIZE;
+        next += getSize(&next) + HEADER_SIZE;
+        // printf("......................................current: %p \t current size: %u \t\t next: %p\n", current, currentSize, next);
+
     }
+    // printf("----------------------------------------------------------\n");
 }
 
 void ufree(void* pointer, char* fileName, int lineNumber)
 {
     char* ptr;
     ptr = (char*) pointer;
+    // printf("pointer to free: ptr: %p\t pointer: %p\n", ptr, pointer);
     if (ptr == NULL)
     {
         printf("Error on free(): trying to free a NULL pointer at line %d of %s.\n", lineNumber, fileName);
@@ -184,21 +227,28 @@ void ufree(void* pointer, char* fileName, int lineNumber)
     uint value = ((uint*)ptr)[-1];
     value &= ~(1U << (BITS - 1));
     ((uint*)ptr)[-1] = value;
+    // printf("value: %u\n", value);
     coalescence();
+    // printf("end of free\n");
     return;
 }
 
 
 // int main() {
 //     initialize();
-//     char* ptr1 = malloc(1000);
+//     char* ptr1 = malloc(2000);
+//     // free(ptr1);
 //     // printf("ptr1: %p \t %zu\n", ptr1, sizeof(ptr1));
-//     // char* ptr2 = malloc(300);
+//     char* ptr2 = malloc(300);
 //     // printf("ptr2: %p \t %zu\n", ptr2, sizeof(ptr2));
 //     // char* ptr3 = malloc(500);
 //     // printf("ptr3: %p\n", ptr3);
-//     // free(ptr1);
-//     // free(ptr2);
-//     printMemoryBlocks(head);
+//     printMemoryBlocks();
+//     free(ptr1);
+//     printMemoryBlocks();
+//     free(ptr2);
+//     printMemoryBlocks();
+//     ptr2 = malloc(500);
+//     printMemoryBlocks();
 //     return 0;
 // }

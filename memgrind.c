@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 
 void consistencyZero()
 {
@@ -40,16 +41,17 @@ void maximizationOne()
 
 void basicCoalescenceTwo()
 {
-    char* ptr1 = malloc(MEM_SIZE/4);
+    char* ptr1 = malloc(MEM_SIZE/2);
     printMemoryBlocks();
     char* ptr2 = malloc(MEM_SIZE/4);
     printMemoryBlocks();
-    // free(ptr1);
-    // free(ptr2);
+    free(ptr1);
+    free(ptr2);
+    printMemoryBlocks();
     char* ptr3 = malloc(MEM_SIZE - 4);
     printMemoryBlocks();
     free(ptr3);
-    printMemoryBlocks();
+    // printMemoryBlocks();
 }
 
 void saturationThree()
@@ -58,24 +60,32 @@ void saturationThree()
     void* ptr;
     for (i=0; i<9216; i++)
     {
-        malloc(1024);
+        ptr = malloc(1024);
+        printf("allocated 1024 bytes, i: %d, ptr: %p\n", i, ptr);
     }
+    printMemoryBlocks();
     while (ptr != NULL)
     {
         ptr = malloc(1);
+        printf("allocated 1 byte, ptr: %p\n", ptr);
     }
+    // printMemoryBlocks();
 }
 
 void timeOverheadFour()
 {
-
+    time_t beginTime, endTime;
+    beginTime = time(NULL);
+    endTime = time(NULL);
+    printf("time elapsed: %ld\n", endTime - beginTime);
 }
 
 int main()
 {
-    consistencyZero();
-    maximizationOne();
+    // consistencyZero();
+    // maximizationOne();
     // basicCoalescenceTwo();
+    saturationThree();
     printMemoryBlocks();
     return 0;
 }
